@@ -1,0 +1,189 @@
+/**
+ *  AIR QUALITY BACKEND – GSM + DASHBOARD READY
+ *  -------------------------------------------
+ *  ✓ Accepts GSM/Arduino sensor data
+ *  ✓ Stores in MongoDB
+ *  ✓ Emits live updates via Socket.IO
+ *  ✓ Emits alerts & persists them
+ *  ✓ Used by your dashboard frontend
+ */
+
+const express = require('express');
+const http = require('http');
+const socketIo = require('socket.io');
+const cors = require('cors');
+const mongoose = require('mongoose');
+require('dotenv').config();
+
+// Models
+const Reading = require('./models/reading');
+const Alert = require('./models/alert');
+const Setting = require('./models/settings');
+
+const app = express();
+app.use(express.json());
+
+// ---------- CORS (Frontend only) ----------
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:5173',
+];
+
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+    return cb(new Error('CORS blocked: ' + origin));
+  },
+  credentials: true
+}));
+
+// ---------- Server + WebSocket ----------
+const server = http.createServer(app);
+const io = socketIo(server, { cors: { origin: "*" } });
+
+// ---------- Connect MongoDB ----------
+mongoose.set('strictQuery', false);
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log(" MongoDB Connected"))
+  .catch(err => console.error(" MongoDB Error:", err.message));
+
+let latestReadingCache = null;
+const inMemoryHistory = [];
+const HISTORY_LIMIT = Number(process.env.HISTORY_LIMIT || 2000);
+
+// ---------- Normalization Utility ----------
+function normalizeReading(reading) {
+  if (!reading) return null;
+  return {
+    _id: reading._id || null,
+    timestamp: reading.timestamp || new Date(),
+    location: reading.location || "Nairobi",
+    metrics: reading.metrics || {},
+  };
+}
+
+function recordReading(r) {
+  const n = normalizeReading(r);
+  latestReadingCache = n;
+  inMemoryHistory.push(n);
+  if (inMemoryHistory.length > HISTORY_LIMIT)
+    inMemoryHistory.splice(0, inMemoryHistory.length - HISTORY_LIMIT);
+  return n;
+}
+
+// ---------- ALERT ENGINE ----------
+const thresholds = { pm25: 150, pm10: 150, co: 10, o3: 100, no2: 100 };
+
+async function processAlerts(normalized) {
+  const alerts = [];
+  for (const metric of Object.keys(thresholds)) {
+    if (!normalized.metrics[metric]) continue;
+
+    const value = normalized.metrics[metric];
+    const limit = thresholds[metric];
+
+    if (value > limit) {
+      const alertDoc = new Alert({
+        readingId: normalized._id,
+        metric,
+        value,
+        threshold: limit,
+        severity: "unhealthy",
+      });
+
+      await alertDoc.save();
+      io.emit("alert", alertDoc.toObject());
+      alerts.push(alertDoc);
+    }
+  }
+  return alerts;
+}
+
+// ------------------------------------------------------------
+//  🔥 GSM / ARDUINO SENDS DATA HERE
+// ------------------------------------------------------------
+app.post("/api/sensor-data", async (req, res) => {
+  try {
+    // GSM device sends:
+    // {
+    //   "location": "Site A",
+    //   "metrics": { "pm25": 35, "pm10": 82, "co": 4 }
+    // }
+
+    const payload = req.body;
+
+    const savedDoc = await new Reading({
+      location: payload.location || "Nairobi",
+      metrics: payload.metrics || {},
+      timestamp: new Date()
+    }).save();
+
+    const normalized = recordReading(savedDoc.toObject());
+
+    // Emit live update
+    io.emit("sensorData", normalized);
+
+    // Handle alerts
+    await processAlerts(normalized);
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Sensor Data Error:", err.message);
+    res.status(500).json({ error: "Failed to save sensor data" });
+  }
+});
+
+// ------------------------------------------------------------
+//  GET LATEST SENSOR DATA
+// ------------------------------------------------------------
+app.get("/api/sensor-data/latest", async (req, res) => {
+  if (latestReadingCache) return res.json(latestReadingCache);
+
+  const last = await Reading.findOne().sort({ timestamp: -1 }).lean();
+  if (!last) return res.status(404).json({ message: "No data yet" });
+
+  const normalized = recordReading(last);
+  res.json(normalized);
+});
+
+// ------------------------------------------------------------
+// HISTORICAL DATA
+// ------------------------------------------------------------
+app.get("/api/historical", async (req, res) => {
+  try {
+    let readings = await Reading.find().sort({ timestamp: 1 }).lean();
+    res.json(readings);
+  } catch (err) {
+    res.status(500).json({ error: "Historical load error" });
+  }
+});
+
+// ------------------------------------------------------------
+// SETTINGS ROUTES
+// ------------------------------------------------------------
+app.post("/api/settings", async (req, res) => {
+  const { userId, thresholds } = req.body;
+  const doc = await Setting.findOneAndUpdate(
+    { userId }, { thresholds }, { new: true, upsert: true }
+  );
+  res.json(doc);
+});
+
+app.get("/api/settings/:userId", async (req, res) => {
+  const doc = await Setting.findOne({ userId: req.params.userId });
+  res.json(doc || {});
+});
+
+// ---------- SOCKET.IO ----------
+io.on("connection", socket =>
+  console.log("WebSocket client connected:", socket.id)
+);
+
+// ---------- HEALTH ----------
+app.get("/health", (_, res) => res.json({ status: "ok" }));
+
+// ---------- START ----------
+const PORT = process.env.PORT || 5000;
+server.listen(PORT, () => console.log(` Server listening on ${PORT}`));
