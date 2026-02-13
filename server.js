@@ -6,6 +6,7 @@
  *  ✓ Emits live updates via Socket.IO
  *  ✓ Emits alerts & persists them
  *  ✓ Used by your dashboard frontend
+ *  ✓ CORS configured for Vercel production
  */
 
 const express = require('express');
@@ -20,20 +21,51 @@ const Reading = require('./models/reading');
 const Alert = require('./models/alert');
 const Setting = require('./models/settings');
 
+// Routes
+const chatbotRouter = require('./routes/chatbot');
+
 const app = express();
 app.use(express.json());
 
 // ---------- CORS (Frontend only) ----------
-const allowedOrigins = [
+// Default localhost origins for development
+const defaultOrigins = [
   'http://localhost:3000',
   'http://localhost:5173',
   'http://127.0.0.1:3000',
   'http://127.0.0.1:5173',
 ];
 
+// Allow configuring one or multiple production frontend origins via env
+// Supports: FRONTEND_URLS, FRONTEND_URL, or CORS_ORIGIN (from your Render config)
+const envOriginsRaw = process.env.FRONTEND_URLS || process.env.FRONTEND_URL || process.env.CORS_ORIGIN || '';
+const envOrigins = envOriginsRaw === '*' 
+  ? [] // Ignore wildcard, use explicit list instead
+  : envOriginsRaw.split(',').map(s => s.trim()).filter(Boolean);
+
+// Production Vercel URL - use base URL to match all deployments (preview, production, etc.)
+const productionOrigins = [
+  'https://air-quality-dashboard-and-ai.vercel.app',
+  'https://air-quality-dashboard-and-ai-git-main',  // Git branch previews
+  'https://air-quality-dashboard-and-ai'  // Base match for all Vercel deployments
+];
+
+const allowedOrigins = [...defaultOrigins, ...envOrigins, ...productionOrigins];
+
 app.use(cors({
   origin: (origin, cb) => {
-    if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+    // Allow requests with no origin (mobile apps, curl, Postman, etc.)
+    if (!origin) return cb(null, true);
+
+    // Check if origin starts with any allowed origin (handles trailing slashes, ports, preview URLs)
+    const isAllowed = allowedOrigins.some(allowedOrigin => origin.startsWith(allowedOrigin));
+    
+    if (isAllowed) {
+      console.log('✓ CORS allowed:', origin);
+      return cb(null, true);
+    }
+
+    console.log('✗ CORS blocked:', origin);
     return cb(new Error('CORS blocked: ' + origin));
   },
   credentials: true
@@ -136,8 +168,44 @@ app.post("/api/sensor-data", async (req, res) => {
 });
 
 // ------------------------------------------------------------
-//  GET LATEST SENSOR DATA
+//  AIRDATA ENDPOINT (ALIAS for Arduino compatibility)
 // ------------------------------------------------------------
+app.post("/api/airdata", async (req, res) => {
+  try {
+    const payload = req.body;
+
+    const savedDoc = await new Reading({
+      location: payload.location || "Nairobi",
+      metrics: payload.metrics || {},
+      timestamp: new Date()
+    }).save();
+
+    const normalized = recordReading(savedDoc.toObject());
+
+    // Emit live update
+    io.emit("sensorData", normalized);
+
+    // Handle alerts
+    await processAlerts(normalized);
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Sensor Data Error:", err.message);
+    res.status(500).json({ error: "Failed to save sensor data" });
+  }
+});
+
+app.get("/api/airdata/latest", async (req, res) => {
+  if (latestReadingCache) return res.json(latestReadingCache);
+
+  const last = await Reading.findOne().sort({ timestamp: -1 }).lean();
+  if (!last) return res.status(404).json({ message: "No data yet" });
+
+  const normalized = recordReading(last);
+  res.json(normalized);
+});
+
+
 app.get("/api/sensor-data/latest", async (req, res) => {
   if (latestReadingCache) return res.json(latestReadingCache);
 
@@ -148,9 +216,7 @@ app.get("/api/sensor-data/latest", async (req, res) => {
   res.json(normalized);
 });
 
-// ------------------------------------------------------------
-// HISTORICAL DATA
-// ------------------------------------------------------------
+
 app.get("/api/historical", async (req, res) => {
   try {
     let readings = await Reading.find().sort({ timestamp: 1 }).lean();
@@ -175,6 +241,9 @@ app.get("/api/settings/:userId", async (req, res) => {
   const doc = await Setting.findOne({ userId: req.params.userId });
   res.json(doc || {});
 });
+
+// ---------- CHATBOT ROUTES ----------
+app.use("/api/chatbot", chatbotRouter);
 
 // ---------- SOCKET.IO ----------
 io.on("connection", socket =>
