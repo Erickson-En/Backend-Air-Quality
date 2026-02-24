@@ -23,26 +23,44 @@ app.get('/', (req, res) => {
   });
 });
 
+// Wake backend from cold start, retry once on timeout
+async function forwardToBackend(body) {
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const response = await axios.post(`${BACKEND_URL}/api/sensor-data`, body, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 60000  // 60s per attempt
+      });
+      return response;
+    } catch (err) {
+      const isTimeout = err.code === 'ECONNABORTED' || (err.message && err.message.includes('timeout'));
+      if (attempt === 1 && isTimeout) {
+        console.log(`⏳ Attempt 1 timed out, waking backend and retrying...`);
+        // Brief pause then retry — backend should be warm now
+        await new Promise(r => setTimeout(r, 2000));
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
 // Proxy endpoint - forwards HTTP to HTTPS
 app.post('/api/sensor-data', async (req, res) => {
   const timestamp = new Date().toISOString();
   console.log(`\n📥 [${timestamp}] Received from Arduino:`);
   console.log(JSON.stringify(req.body, null, 2));
-  
+
   try {
-    const response = await axios.post(`${BACKEND_URL}/api/sensor-data`, req.body, {
-      headers: { 'Content-Type': 'application/json' },
-      timeout: 30000  // 30s - handles Railway free tier cold starts
-    });
-    
+    const response = await forwardToBackend(req.body);
     console.log(`✅ [${timestamp}] Forwarded successfully. Backend response:`, response.status);
     res.json({ success: true, forwarded: true, backendStatus: response.status });
   } catch (error) {
     console.error(`❌ [${timestamp}] Forward failed:`, error.message);
     if (error.response) {
       console.error(`   Backend returned: ${error.response.status} - ${error.response.statusText}`);
-      res.status(error.response.status).json({ 
-        success: false, 
+      res.status(error.response.status).json({
+        success: false,
         error: error.message,
         backendStatus: error.response.status
       });
@@ -51,6 +69,16 @@ app.post('/api/sensor-data', async (req, res) => {
     }
   }
 });
+
+// Keep backend warm — ping every 4 minutes to prevent cold starts
+setInterval(async () => {
+  try {
+    await axios.get(`${BACKEND_URL}/health`, { timeout: 10000 });
+    console.log('💓 Keep-alive ping OK');
+  } catch (e) {
+    console.log('💤 Keep-alive ping failed (backend may be sleeping):', e.message);
+  }
+}, 4 * 60 * 1000);
 
 // Catch-all for debugging
 app.use((req, res) => {
