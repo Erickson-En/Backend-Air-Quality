@@ -53,7 +53,7 @@ app.post('/api/sensor-data', async (req, res) => {
 });
 
 // Catch-all for debugging
-app.all('*', (req, res) => {
+app.use((req, res) => {
   console.log(`⚠️  Unhandled ${req.method} request to: ${req.path}`);
   res.status(404).json({ 
     error: 'Endpoint not found',
