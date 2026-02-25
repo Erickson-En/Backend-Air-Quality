@@ -12,91 +12,54 @@ const BACKEND_URL = process.env.TARGET_URL ||
                    process.env.BACKEND_URL || 
                    'https://backend-air-quality-production.up.railway.app';
 
-console.log('🎯 Target backend:', BACKEND_URL);
-
-// Health check
-app.get('/', (req, res) => {
-  res.json({ 
-    status: 'HTTP Proxy Running', 
-    forwards_to: BACKEND_URL,
-    note: 'SIM800L sends HTTP here, proxy forwards to HTTPS backend'
-  });
+// Health check - handles both Railway's probe and root requests silently
+app.get(['/', '/health'], (req, res) => {
+  res.json({ status: 'ok', proxy: 'running', forwards_to: BACKEND_URL });
 });
-
-// Wake backend from cold start, retry once on timeout
-async function forwardToBackend(body) {
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    try {
-      const response = await axios.post(`${BACKEND_URL}/api/sensor-data`, body, {
-        headers: { 'Content-Type': 'application/json' },
-        timeout: 60000  // 60s per attempt
-      });
-      return response;
-    } catch (err) {
-      const isTimeout = err.code === 'ECONNABORTED' || (err.message && err.message.includes('timeout'));
-      if (attempt === 1 && isTimeout) {
-        console.log(`⏳ Attempt 1 timed out, waking backend and retrying...`);
-        // Brief pause then retry — backend should be warm now
-        await new Promise(r => setTimeout(r, 2000));
-        continue;
-      }
-      throw err;
-    }
-  }
-}
 
 // Proxy endpoint - forwards HTTP to HTTPS
+// Rate-limit proxy logs to max 10/min
+let proxyLogCount = 0;
+let proxyLogReset = Date.now();
+function proxyLog(msg) {
+  const now = Date.now();
+  if (now - proxyLogReset > 60000) { proxyLogCount = 0; proxyLogReset = now; }
+  if (proxyLogCount < 10) { proxyLogCount++; console.log(msg); }
+}
+
 app.post('/api/sensor-data', async (req, res) => {
-  const timestamp = new Date().toISOString();
-  console.log(`\n📥 [${timestamp}] Received from Arduino:`);
-  console.log(JSON.stringify(req.body, null, 2));
+  // Reject empty/incomplete payloads before forwarding
+  if (!req.body || !req.body.metrics || Object.keys(req.body.metrics).length === 0) {
+    return res.status(400).json({ error: 'Invalid or incomplete payload' });
+  }
 
   try {
-    const response = await forwardToBackend(req.body);
-    console.log(`✅ [${timestamp}] Forwarded successfully. Backend response:`, response.status);
+    const response = await axios.post(`${BACKEND_URL}/api/sensor-data`, req.body, {
+      headers: { 'Content-Type': 'application/json' },
+      timeout: 30000
+    });
+    proxyLog(`✅ Forwarded sensor data → backend ${response.status}`);
     res.json({ success: true, forwarded: true, backendStatus: response.status });
   } catch (error) {
-    console.error(`❌ [${timestamp}] Forward failed:`, error.message);
-    if (error.response) {
-      console.error(`   Backend returned: ${error.response.status} - ${error.response.statusText}`);
-      res.status(error.response.status).json({
-        success: false,
-        error: error.message,
-        backendStatus: error.response.status
-      });
-    } else {
-      res.status(500).json({ success: false, error: error.message });
-    }
+    const status = error.response ? error.response.status : 500;
+    proxyLog(`❌ Forward failed: ${error.message}`);
+    res.status(status).json({ success: false, error: error.message });
   }
 });
 
-// Keep backend warm — ping every 4 minutes to prevent cold starts
+// Silent catch-all (no logging - avoids Railway health-check spam)
+app.all('*', (req, res) => {
+  res.status(404).json({ error: 'Not found', path: req.path });
+});
+
+// Keep-alive: ping backend every 4 min to prevent cold starts (silent)
 setInterval(async () => {
   try {
     await axios.get(`${BACKEND_URL}/health`, { timeout: 10000 });
-    console.log('💓 Keep-alive ping OK');
-  } catch (e) {
-    console.log('💤 Keep-alive ping failed (backend may be sleeping):', e.message);
-  }
-}, 4 * 60 * 1000);
-
-// Catch-all for debugging
-app.use((req, res) => {
-  console.log(`⚠️  Unhandled ${req.method} request to: ${req.path}`);
-  res.status(404).json({ 
-    error: 'Endpoint not found',
-    availableEndpoints: ['POST /api/sensor-data', 'GET /'],
-    yourRequest: `${req.method} ${req.path}`
-  });
-});
+  } catch (_) { /* silent - backend may be starting up */ }
+}, 240000);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log('\n' + '='.repeat(60));
-  console.log('🚀 HTTP to HTTPS Proxy Server Running');
-  console.log('='.repeat(60));
-  console.log(`📍 Listening on port: ${PORT}`);
-  console.log(`🎯 Forwarding to: ${BACKEND_URL}`);
-  console.log(`💡 Use this URL in Arduino: http://[your-proxy-url]/api/sensor-data`);
-  console.log('='.repeat(60) + '\n');
+  console.log(`Proxy listening on ${PORT} → ${BACKEND_URL}`);
 });
