@@ -36,7 +36,7 @@ app.post('/api/sensor-data', async (req, res) => {
   try {
     const response = await axios.post(`${BACKEND_URL}/api/sensor-data`, req.body, {
       headers: { 'Content-Type': 'application/json' },
-      timeout: 30000
+      timeout: 60000  // 60s - handles Railway free tier cold starts (~30-50s)
     });
     proxyLog(`✅ Forwarded sensor data → backend ${response.status}`);
     res.json({ success: true, forwarded: true, backendStatus: response.status });
@@ -52,12 +52,12 @@ app.use((req, res) => {
   res.status(404).json({ error: 'Not found', path: req.path });
 });
 
-// Keep-alive: ping backend every 4 min to prevent cold starts (silent)
+// Keep-alive: ping backend every 3 min to prevent cold starts (silent)
 setInterval(async () => {
   try {
     await axios.get(`${BACKEND_URL}/health`, { timeout: 10000 });
   } catch (_) { /* silent - backend may be starting up */ }
-}, 240000);
+}, 180000);  // 3 minutes
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
