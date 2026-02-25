@@ -47,8 +47,8 @@ app.post('/api/sensor-data', async (req, res) => {
   }
 });
 
-// Silent catch-all (no logging - avoids Railway health-check spam)
-app.all('*', (req, res) => {
+// Silent catch-all (no logging - avoids health-check spam)
+app.use((req, res) => {
   res.status(404).json({ error: 'Not found', path: req.path });
 });
 
