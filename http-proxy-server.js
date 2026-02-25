@@ -37,7 +37,7 @@ app.post('/api/sensor-data', async (req, res) => {
   try {
     const response = await axios.post(`${BACKEND_URL}/api/sensor-data`, req.body, {
       headers: { 'Content-Type': 'application/json' },
-      timeout: 60000  // 60s - handles Railway free tier cold starts (~30-50s)
+      timeout: 120000  // 120s - handles Render free tier DEEP cold starts (~60-90s)
     });
     proxyLog(`✅ Forwarded sensor data → backend ${response.status}`);
     res.json({ success: true, forwarded: true, backendStatus: response.status });
