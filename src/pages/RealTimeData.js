@@ -203,7 +203,7 @@ export default function RealTimeData(){
 
     const commonAxis = (
       <>
-        <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
         <XAxis 
           dataKey="ts" 
           type="number" 
@@ -284,11 +284,11 @@ export default function RealTimeData(){
               {isConnected ? 'Connected' : 'Disconnected'}
             </span>
             {lastUpdate && (
-              <span style={{ fontSize: '14px', color: '#666' }}>
+              <span style={{ fontSize: '14px', color: 'rgba(255,255,255,0.5)' }}>
                 Last Update: {lastUpdate.toLocaleTimeString()}
               </span>
             )}
-            <span style={{ fontSize: '14px', color: '#666' }}>
+            <span style={{ fontSize: '14px', color: 'rgba(255,255,255,0.5)' }}>
               Updates: {updateCount}
             </span>
           </div>
@@ -301,9 +301,9 @@ export default function RealTimeData(){
             style={{
               padding: '8px 16px',
               borderRadius: '6px',
-              border: '1px solid #ddd',
-              backgroundColor: autoRefresh ? '#00e400' : '#ccc',
-              color: autoRefresh ? '#fff' : '#333',
+              border: '1px solid rgba(255,255,255,0.1)',
+              backgroundColor: autoRefresh ? '#00e400' : 'rgba(255,255,255,0.1)',
+              color: '#fff',
               cursor: 'pointer',
               fontSize: '14px',
               fontWeight: '500',
@@ -317,8 +317,9 @@ export default function RealTimeData(){
             style={{
               padding: '8px 16px',
               borderRadius: '6px',
-              border: '1px solid #ddd',
-              backgroundColor: '#fff',
+              border: '1px solid rgba(255,255,255,0.1)',
+              backgroundColor: 'rgba(255,255,255,0.05)',
+              color: '#fff',
               cursor: 'pointer',
               fontSize: '14px',
               fontWeight: '500'
@@ -331,7 +332,7 @@ export default function RealTimeData(){
             style={{
               padding: '8px 16px',
               borderRadius: '6px',
-              border: '1px solid #ddd',
+              border: '1px solid rgba(255,255,255,0.1)',
               backgroundColor: '#4CAF50',
               color: '#fff',
               cursor: 'pointer',
@@ -346,7 +347,7 @@ export default function RealTimeData(){
             style={{
               padding: '8px 16px',
               borderRadius: '6px',
-              border: '1px solid #ddd',
+              border: '1px solid rgba(255,255,255,0.1)',
               backgroundColor: '#2196F3',
               color: '#fff',
               cursor: 'pointer',
@@ -404,8 +405,8 @@ export default function RealTimeData(){
               <div
                 key={alert.id}
                 style={{
-                  backgroundColor: '#fff3cd',
-                  border: '1px solid #ffc107',
+                  backgroundColor: 'rgba(255,152,0,0.15)',
+                  border: '1px solid rgba(255,193,7,0.4)',
                   borderRadius: '8px',
                   padding: '12px',
                   display: 'flex',
@@ -417,7 +418,7 @@ export default function RealTimeData(){
                 <span>
                   <strong>{alert.metric}</strong>: {alert.value.toFixed(2)} exceeds threshold of {alert.threshold}
                 </span>
-                <span style={{ color: '#666' }}>{alert.timestamp}</span>
+                <span style={{ color: 'rgba(255,255,255,0.5)' }}>{alert.timestamp}</span>
               </div>
             ))}
           </div>
@@ -492,11 +493,12 @@ export default function RealTimeData(){
       {/* Statistics Panel */}
       {showStats && stats && (
         <div style={{
-          backgroundColor: '#f8f9fa',
+          backgroundColor: 'rgba(255,255,255,0.03)',
           borderRadius: '12px',
           padding: '20px',
           marginBottom: '20px',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+          boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+          border: '1px solid rgba(255,255,255,0.05)'
         }}>
           <h3 style={{ marginBottom: '16px', fontSize: '18px', fontWeight: '600' }}>
             Session Statistics
@@ -510,12 +512,12 @@ export default function RealTimeData(){
               if (!stat) return null;
               return (
                 <div key={key} style={{ 
-                  backgroundColor: '#fff', 
+                  backgroundColor: 'rgba(255,255,255,0.05)', 
                   padding: '12px', 
                   borderRadius: '8px',
-                  border: '1px solid #e0e0e0'
+                  border: '1px solid rgba(255,255,255,0.08)'
                 }}>
-                  <div style={{ fontWeight: '600', marginBottom: '8px', textTransform: 'uppercase', fontSize: '12px', color: '#666' }}>
+                  <div style={{ fontWeight: '600', marginBottom: '8px', textTransform: 'uppercase', fontSize: '12px', color: 'rgba(255,255,255,0.5)' }}>
                     {key.replace(/([A-Z])/g, ' $1').toUpperCase()}
                   </div>
                   <div style={{ fontSize: '14px', lineHeight: '1.6' }}>
@@ -550,9 +552,9 @@ export default function RealTimeData(){
               style={{
                 padding: '6px 12px',
                 borderRadius: '6px',
-                border: '1px solid #ddd',
-                backgroundColor: chartType === 'line' ? '#2196F3' : '#fff',
-                color: chartType === 'line' ? '#fff' : '#333',
+                border: '1px solid rgba(255,255,255,0.1)',
+                backgroundColor: chartType === 'line' ? '#00b3ff' : 'rgba(255,255,255,0.05)',
+                color: '#fff',
                 cursor: 'pointer',
                 fontSize: '13px'
               }}
@@ -564,9 +566,9 @@ export default function RealTimeData(){
               style={{
                 padding: '6px 12px',
                 borderRadius: '6px',
-                border: '1px solid #ddd',
-                backgroundColor: chartType === 'area' ? '#2196F3' : '#fff',
-                color: chartType === 'area' ? '#fff' : '#333',
+                border: '1px solid rgba(255,255,255,0.1)',
+                backgroundColor: chartType === 'area' ? '#00b3ff' : 'rgba(255,255,255,0.05)',
+                color: '#fff',
                 cursor: 'pointer',
                 fontSize: '13px'
               }}

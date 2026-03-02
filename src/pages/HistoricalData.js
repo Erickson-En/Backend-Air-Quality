@@ -189,11 +189,12 @@ export default function HistoricalData() {
       
       {/* Controls Panel */}
       <div style={{ 
-        background: 'var(--card-bg, #fff)', 
+        background: 'var(--card-bg)', 
         padding: 16, 
         borderRadius: 12, 
         marginBottom: 16,
-        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+        boxShadow: 'var(--glass-shadow)',
+        border: '1px solid var(--glass-border)'
       }}>
         {/* Timeframe Selection */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16, alignItems: 'center' }}>
@@ -216,7 +217,7 @@ export default function HistoricalData() {
             </button>
           </div>
 
-          <div style={{ height: 24, width: 1, background: 'rgba(0,0,0,0.1)' }} />
+          <div style={{ height: 24, width: 1, background: 'rgba(255,255,255,0.1)' }} />
 
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flex: 1 }}>
             <label style={{ fontSize: 13, fontWeight: '500' }}>Custom Range:</label>
@@ -224,14 +225,14 @@ export default function HistoricalData() {
               type="datetime-local" 
               value={start} 
               onChange={(e) => setStart(e.target.value)}
-              style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid rgba(0,0,0,0.2)' }}
+              style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.05)', color: '#fff' }}
             />
             <span>to</span>
             <input 
               type="datetime-local" 
               value={end} 
               onChange={(e) => setEnd(e.target.value)}
-              style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid rgba(0,0,0,0.2)' }}
+              style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.05)', color: '#fff' }}
             />
             {(start || end) && (
               <button className="btn" onClick={() => { setStart(''); setEnd(''); }}>Clear</button>
@@ -263,7 +264,7 @@ export default function HistoricalData() {
             </button>
           </div>
           
-          <div style={{ height: 20, width: 1, background: 'rgba(0,0,0,0.1)' }} />
+          <div style={{ height: 20, width: 1, background: 'rgba(255,255,255,0.1)' }} />
           
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <span style={{ fontSize: 13, fontWeight: '500', marginRight: 4 }}>Chart:</span>
@@ -281,7 +282,7 @@ export default function HistoricalData() {
             </button>
           </div>
           
-          <div style={{ height: 20, width: 1, background: 'rgba(0,0,0,0.1)' }} />
+          <div style={{ height: 20, width: 1, background: 'rgba(255,255,255,0.1)' }} />
           
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
             <input 
@@ -301,11 +302,12 @@ export default function HistoricalData() {
       {/* Statistics Summary */}
       {!loading && rows.length > 0 && (
         <div style={{ 
-          background: 'var(--card-bg, #fff)', 
+          background: 'var(--card-bg)', 
           padding: 16, 
           borderRadius: 12, 
           marginBottom: 16,
-          boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+          boxShadow: 'var(--glass-shadow)',
+          border: '1px solid var(--glass-border)'
         }}>
           <h3 style={{ margin: '0 0 12px 0', fontSize: 18 }}>📈 Statistical Summary</h3>
           <div style={{ 
@@ -318,7 +320,7 @@ export default function HistoricalData() {
               return (
                 <div key={m.key} style={{ 
                   padding: 12, 
-                  background: 'rgba(0,0,0,0.02)', 
+                  background: 'rgba(255,255,255,0.03)', 
                   borderRadius: 8,
                   borderLeft: `4px solid ${m.stroke}`
                 }}>
@@ -350,11 +352,12 @@ export default function HistoricalData() {
       {/* Metric Selector (for combined view) */}
       {viewMode === 'combined' && (
         <div style={{ 
-          background: 'var(--card-bg, #fff)', 
+          background: 'var(--card-bg)', 
           padding: 12, 
           borderRadius: 12, 
           marginBottom: 16,
-          boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+          boxShadow: 'var(--glass-shadow)',
+          border: '1px solid var(--glass-border)'
         }}>
           <span style={{ fontSize: 13, fontWeight: '500', marginRight: 12 }}>Select Metrics:</span>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
@@ -364,7 +367,7 @@ export default function HistoricalData() {
                 alignItems: 'center', 
                 gap: 6, 
                 padding: '6px 12px', 
-                background: selectedMetrics.includes(m.key) ? m.stroke + '20' : 'rgba(0,0,0,0.05)',
+                background: selectedMetrics.includes(m.key) ? m.stroke + '20' : 'rgba(255,255,255,0.05)',
                 borderRadius: 20,
                 cursor: 'pointer',
                 border: selectedMetrics.includes(m.key) ? `2px solid ${m.stroke}` : '2px solid transparent',
@@ -392,7 +395,7 @@ export default function HistoricalData() {
         </div>
       )}
       {!loading && rows.length === 0 && (
-        <div style={{ textAlign: 'center', padding: 40, background: 'var(--card-bg, #fff)', borderRadius: 12 }}>
+        <div style={{ textAlign: 'center', padding: 40, background: 'var(--card-bg)', borderRadius: 12 }}>
           <div style={{ fontSize: 48 }}>📭</div>
           <p>No data available for the selected time period</p>
         </div>
@@ -411,10 +414,11 @@ export default function HistoricalData() {
             
             return (
               <div key={m.key} style={{ 
-                background: 'var(--card-bg, #fff)', 
+                background: 'var(--card-bg)', 
                 padding: 16, 
                 borderRadius: 12,
-                boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                boxShadow: 'var(--glass-shadow)',
+                border: '1px solid var(--glass-border)'
               }}>
                 <div style={{ 
                   fontWeight: 'bold', 
@@ -443,16 +447,16 @@ export default function HistoricalData() {
                           <stop offset="95%" stopColor={m.stroke} stopOpacity={0.1}/>
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.1)" />
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
                       <XAxis
                         dataKey="ts"
                         type="number"
                         scale="time"
                         domain={['auto', 'auto']}
                         tickFormatter={timeTickFormatter}
-                        stroke="rgba(0,0,0,0.5)"
+                        stroke="rgba(255,255,255,0.3)"
                       />
-                      <YAxis width={60} stroke="rgba(0,0,0,0.5)" />
+                      <YAxis width={60} stroke="rgba(255,255,255,0.3)" />
                       <Tooltip
                         labelFormatter={tooltipLabelFormatter}
                         formatter={tooltipFormatter(m.key)}
@@ -489,25 +493,26 @@ export default function HistoricalData() {
       {/* Combined View */}
       {!loading && rows.length > 0 && viewMode === 'combined' && (
         <div style={{ 
-          background: 'var(--card-bg, #fff)', 
+          background: 'var(--card-bg)', 
           padding: 16, 
           borderRadius: 12,
-          boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+          boxShadow: 'var(--glass-shadow)',
+          border: '1px solid var(--glass-border)'
         }}>
           <h3 style={{ margin: '0 0 16px 0', fontSize: 18 }}>Combined Metrics View</h3>
           <div style={{ width: '100%', height: 500 }}>
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={rows}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.1)" />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
                 <XAxis
                   dataKey="ts"
                   type="number"
                   scale="time"
                   domain={['auto', 'auto']}
                   tickFormatter={timeTickFormatter}
-                  stroke="rgba(0,0,0,0.5)"
+                  stroke="rgba(255,255,255,0.3)"
                 />
-                <YAxis stroke="rgba(0,0,0,0.5)" />
+                <YAxis stroke="rgba(255,255,255,0.3)" />
                 <Tooltip
                   labelFormatter={tooltipLabelFormatter}
                   contentStyle={{ background: 'rgba(0,0,0,0.8)', border: 'none', borderRadius: 8, color: '#fff' }}
@@ -534,16 +539,17 @@ export default function HistoricalData() {
       {/* Table View */}
       {!loading && rows.length > 0 && viewMode === 'table' && (
         <div style={{ 
-          background: 'var(--card-bg, #fff)', 
+          background: 'var(--card-bg)', 
           padding: 16, 
           borderRadius: 12,
-          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+          boxShadow: 'var(--glass-shadow)',
+          border: '1px solid var(--glass-border)',
           overflowX: 'auto'
         }}>
           <h3 style={{ margin: '0 0 16px 0', fontSize: 18 }}>Data Table</h3>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
-              <tr style={{ background: 'rgba(0,0,0,0.05)', borderBottom: '2px solid rgba(0,0,0,0.1)' }}>
+              <tr style={{ background: 'rgba(255,255,255,0.05)', borderBottom: '2px solid rgba(255,255,255,0.1)' }}>
                 <th style={{ padding: 10, textAlign: 'left' }}>Timestamp</th>
                 {metrics.map(m => (
                   <th key={m.key} style={{ padding: 10, textAlign: 'right' }}>
@@ -554,7 +560,7 @@ export default function HistoricalData() {
             </thead>
             <tbody>
               {rows.slice(0, 100).map((row, i) => (
-                <tr key={i} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+                <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                   <td style={{ padding: 10 }}>{new Date(row.timestamp).toLocaleString()}</td>
                   {metrics.map(m => {
                     const value = row[m.key];
