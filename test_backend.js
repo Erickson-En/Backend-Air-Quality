@@ -23,13 +23,17 @@ const BACKEND_PORT = 5000;         // Change if using different port
 const testData = {
   location: "Test Lab",
   metrics: {
+    pm1: 18.3,
     pm25: 25.5,
     pm10: 50.2,
     co: 3.8,
+    co2: 420,
     o3: 30.5,
     no2: 15.2,
     temperature: 27.5,
-    humidity: 65.0
+    humidity: 65.0,
+    voc_index: 120,
+    nox_index: 45
   }
 };
 

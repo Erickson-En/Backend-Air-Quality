@@ -83,7 +83,8 @@ async function processQuery(query) {
       };
     }
 
-    const aqi = calculateAQI(latestReading.pm25);
+    const m = latestReading.metrics || {};
+    const aqi = calculateAQI(m.pm25);
     const health = getHealthRecommendations(aqi);
 
     // Current conditions queries
@@ -91,11 +92,13 @@ async function processQuery(query) {
       return {
         response: `Current air quality is ${health.category} (AQI: ${aqi}).\n\n` +
                  `📊 Measurements:\n` +
-                 `• PM2.5: ${latestReading.pm25} μg/m³\n` +
-                 `• PM10: ${latestReading.pm10} μg/m³\n` +
-                 `• CO: ${latestReading.co} ppm\n` +
-                 `• Temperature: ${latestReading.temperature}°C\n` +
-                 `• Humidity: ${latestReading.humidity}%\n\n` +
+                 `• PM1.0: ${m.pm1 ?? 'N/A'} μg/m³\n` +
+                 `• PM2.5: ${m.pm25} μg/m³\n` +
+                 `• PM10: ${m.pm10} μg/m³\n` +
+                 `• CO: ${m.co} ppm\n` +
+                 `• CO₂: ${m.co2 ?? 'N/A'} ppm\n` +
+                 `• Temperature: ${m.temperature}°C\n` +
+                 `• Humidity: ${m.humidity}%\n\n` +
                  `💡 ${health.advice}`,
         data: { aqi, ...latestReading.toObject(), health }
       };
@@ -125,35 +128,35 @@ async function processQuery(query) {
 
     // PM2.5 specific queries
     if (lowerQuery.includes('pm2.5') || lowerQuery.includes('pm 2.5')) {
-      const status = latestReading.pm25 <= 12 ? 'excellent' : 
-                    latestReading.pm25 <= 35.4 ? 'good' : 
-                    latestReading.pm25 <= 55.4 ? 'moderate' : 'concerning';
+      const status = m.pm25 <= 12 ? 'excellent' : 
+                    m.pm25 <= 35.4 ? 'good' : 
+                    m.pm25 <= 55.4 ? 'moderate' : 'concerning';
       return {
-        response: `PM2.5 level is ${latestReading.pm25} μg/m³ (${status}).\n\n` +
+        response: `PM2.5 level is ${m.pm25} μg/m³ (${status}).\n\n` +
                  `This contributes to an AQI of ${aqi}. ` +
-                 `${latestReading.pm25 > 35.4 ? 'This is above recommended levels.' : 'This is within safe limits.'}`,
-        data: { pm25: latestReading.pm25, aqi, status }
+                 `${m.pm25 > 35.4 ? 'This is above recommended levels.' : 'This is within safe limits.'}`,
+        data: { pm25: m.pm25, aqi, status }
       };
     }
 
     // Temperature/humidity queries
     if (lowerQuery.includes('temperature') || lowerQuery.includes('temp') || lowerQuery.includes('hot') || lowerQuery.includes('cold')) {
       return {
-        response: `Current temperature is ${latestReading.temperature}°C with ${latestReading.humidity}% humidity.\n\n` +
-                 `${latestReading.temperature > 30 ? '🌡️ It\'s quite warm. Stay hydrated!' : 
-                    latestReading.temperature < 15 ? '❄️ It\'s cool outside. Dress warmly!' : 
+        response: `Current temperature is ${m.temperature}°C with ${m.humidity}% humidity.\n\n` +
+                 `${m.temperature > 30 ? '🌡️ It\'s quite warm. Stay hydrated!' : 
+                    m.temperature < 15 ? '❄️ It\'s cool outside. Dress warmly!' : 
                     '🌤️ Temperature is comfortable.'}`,
-        data: { temperature: latestReading.temperature, humidity: latestReading.humidity }
+        data: { temperature: m.temperature, humidity: m.humidity }
       };
     }
 
     // CO queries
     if (lowerQuery.includes('co') || lowerQuery.includes('carbon monoxide')) {
-      const safe = latestReading.co < 9;
+      const safe = m.co < 9;
       return {
-        response: `Carbon monoxide level is ${latestReading.co} ppm.\n\n` +
+        response: `Carbon monoxide level is ${m.co} ppm.\n\n` +
                  `${safe ? '✅ This is within safe limits (< 9 ppm).' : '⚠️ This exceeds safe limits! Ensure proper ventilation.'}`,
-        data: { co: latestReading.co, safe }
+        data: { co: m.co, safe }
       };
     }
 
@@ -170,8 +173,8 @@ async function processQuery(query) {
         };
       }
 
-      const firstAQI = calculateAQI(last24h[0].pm25);
-      const lastAQI = calculateAQI(last24h[last24h.length - 1].pm25);
+      const firstAQI = calculateAQI(last24h[0].metrics?.pm25);
+      const lastAQI = calculateAQI(last24h[last24h.length - 1].metrics?.pm25);
       const change = lastAQI - firstAQI;
       const trend = change > 5 ? 'worsening' : change < -5 ? 'improving' : 'stable';
 
