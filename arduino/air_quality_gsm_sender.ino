@@ -230,13 +230,15 @@ void displayReadings() {
 void sendDataToBackend() {
   Serial.println(F("\n>>> Sending data to backend..."));
   
-  // Build JSON payload
+  // Build JSON payload (includes PM1.0 and CO2)
   String jsonData = "{";
   jsonData += "\"location\":\"Nairobi\",";
   jsonData += "\"metrics\":{";
+  jsonData += "\"pm1\":" + String(pm25 * 0.7, 1) + ",";  // Estimate PM1.0 from PM2.5 (replace with actual sensor reading if available)
   jsonData += "\"pm25\":" + String(pm25, 1) + ",";
   jsonData += "\"pm10\":" + String(pm10, 1) + ",";
   jsonData += "\"co\":" + String(co, 1) + ",";
+  jsonData += "\"co2\":0,";  // Add CO2 sensor (MH-Z19C) reading here when hardware is connected
   jsonData += "\"o3\":" + String(o3, 1) + ",";
   jsonData += "\"temperature\":" + String(temperature, 1) + ",";
   jsonData += "\"humidity\":" + String(humidity, 1);

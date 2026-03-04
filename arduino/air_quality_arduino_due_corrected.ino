@@ -248,6 +248,7 @@ void loop() {
   String json = "{";
   json += "\"location\":\"Station-1\",";
   json += "\"metrics\":{";
+  json += "\"pm1\":" + String(pm1_0) + ",";
   json += "\"pm25\":" + String(pm2_5) + ",";
   json += "\"pm10\":" + String(pm10) + ",";
   json += "\"co\":" + String(CO_ppm, 2) + ",";  // 2 decimal places

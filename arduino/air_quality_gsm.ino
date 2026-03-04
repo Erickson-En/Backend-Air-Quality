@@ -165,9 +165,11 @@ String buildJSON(float pm25, float pm10, float co, float temp, float humidity) {
   String json = "{";
   json += "\"location\":\"" + String(LOCATION) + "\",";
   json += "\"metrics\":{";
+  json += "\"pm1\":" + String(pm25 * 0.7, 2) + ",";  // Estimate PM1.0 from PM2.5 (replace with actual sensor reading if available)
   json += "\"pm25\":" + String(pm25, 2) + ",";
   json += "\"pm10\":" + String(pm10, 2) + ",";
   json += "\"co\":" + String(co, 2) + ",";
+  json += "\"co2\":0,";  // Add CO2 sensor (MH-Z19C) reading here when hardware is connected
   json += "\"temperature\":" + String(temp, 2) + ",";
   json += "\"humidity\":" + String(humidity, 2);
   json += "}}";

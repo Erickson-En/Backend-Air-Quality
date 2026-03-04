@@ -107,7 +107,7 @@ function recordReading(r) {
 }
 
 // ---------- ALERT ENGINE ----------
-const thresholds = { pm25: 150, pm10: 150, co: 10, o3: 100, no2: 100 };
+const thresholds = { pm1: 50, pm25: 150, pm10: 150, co: 10, co2: 1000, o3: 100, no2: 100 };
 
 async function processAlerts(normalized) {
   const alerts = [];
