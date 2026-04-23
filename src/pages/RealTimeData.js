@@ -174,7 +174,7 @@ export default function RealTimeData(){
       const ts = flat?.timestamp ? new Date(flat.timestamp).getTime() : Date.now();
       const aqi = flat.pm25 ? calculateAQI(flat.pm25) : null;
       
-      setMetrics(prev => ({...prev, ...flat}});
+      setMetrics(prev => ({...prev, ...flat}));
       setSeries(prev => [...prev.slice(-49), {...flat, ts, aqi}]);
       setLastUpdate(new Date());
       setUpdateCount(prev => prev + 1);
