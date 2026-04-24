@@ -23,6 +23,8 @@ const Setting = require('./models/settings');
 
 // Routes
 const chatbotRouter = require('./routes/chatbot');
+const analyticsRouter = require('./routes/analytics');
+const diagnosticsRouter = require('./routes/diagnostics');
 
 const app = express();
 app.use(express.json());
@@ -246,6 +248,12 @@ app.get("/api/settings/:userId", async (req, res) => {
 
 // ---------- CHATBOT ROUTES ----------
 app.use("/api/chatbot", chatbotRouter);
+
+// ---------- ANALYTICS ROUTES ----------
+app.use("/api/analytics", analyticsRouter);
+
+// ---------- DIAGNOSTICS ROUTES ----------
+app.use("/api/diagnostics", diagnosticsRouter);
 
 // ---------- SOCKET.IO ----------
 io.on("connection", socket => {
