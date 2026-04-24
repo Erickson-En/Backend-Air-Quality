@@ -2,72 +2,67 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { api } from '../config/api';
 import {
-  LineChart,
-  Line,
+  ComposedChart,
+  CartesianGrid,
   XAxis,
   YAxis,
-  CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Brush,
-  AreaChart,
   Area,
-  ComposedChart,
-  Legend,
-  ReferenceLine
+  Bar
 } from 'recharts';
 
+// Color palette from aqmrg-frontend
 const metrics = [
-  { label: 'PM1.0', key: 'pm1', stroke: '#00d4ff', unit: 'µg/m³', threshold: 50, category: 'air' },
-  { label: 'PM2.5', key: 'pm25', stroke: '#00e5ff', unit: 'µg/m³', threshold: 35, category: 'air' },
-  { label: 'PM10', key: 'pm10', stroke: '#7d4bff', unit: 'µg/m³', threshold: 150, category: 'air' },
-  { label: 'CO', key: 'co', stroke: '#ff7a00', unit: 'ppm', threshold: 9, category: 'air' },
-  { label: 'CO₂', key: 'co2', stroke: '#ff5722', unit: 'ppm', threshold: 1000, category: 'air' },
-  { label: 'Temperature', key: 'temperature', stroke: '#ffb300', unit: '°C', threshold: null, category: 'env' },
-  { label: 'Humidity', key: 'humidity', stroke: '#00bcd4', unit: '%', threshold: null, category: 'env' },
-  { label: 'VOC Index', key: 'voc_index', stroke: '#9c27b0', unit: '', threshold: 250, category: 'air' },
-  { label: 'NOx Index', key: 'nox_index', stroke: '#e91e63', unit: '', threshold: 250, category: 'air' }
+  { label: 'PM1.0', key: 'pm1', stroke: '#ec4899', unit: 'µg/m³', threshold: 50, category: 'air' },
+  { label: 'PM2.5', key: 'pm25', stroke: '#f43f5e', unit: 'µg/m³', threshold: 35, category: 'air' },
+  { label: 'PM10', key: 'pm10', stroke: '#fbbf24', unit: 'µg/m³', threshold: 150, category: 'air' },
+  { label: 'CO', key: 'co', stroke: '#f59e0b', unit: 'ppm', threshold: 9, category: 'air' },
+  { label: 'CO₂', key: 'co2', stroke: '#10b981', unit: 'ppm', threshold: 1000, category: 'air' },
+  { label: 'Temperature', key: 'temperature', stroke: '#3b82f6', unit: '°C', threshold: null, category: 'env' },
+  { label: 'Humidity', key: 'humidity', stroke: '#06b6d4', unit: '%', threshold: null, category: 'env' },
+  { label: 'VOC Index', key: 'voc_index', stroke: '#8b5cf6', unit: '', threshold: 250, category: 'air' },
+  { label: 'NOx Index', key: 'nox_index', stroke: '#ec4899', unit: '', threshold: 250, category: 'air' }
 ];
 
 export default function HistoricalData() {
-  const [timeframe, setTimeframe] = useState('24h');
+  const [timeBucket, setTimeBucket] = useState('daily'); // Granularity: hourly, daily, weekly, monthly, yearly
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [start, setStart] = useState('');
-  const [end, setEnd] = useState('');
-  const [viewMode, setViewMode] = useState('grid'); // grid, combined, table
-  const [selectedMetrics, setSelectedMetrics] = useState(metrics.slice(0, 5).map(m => m.key));
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().slice(0, 10));
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   const [stats, setStats] = useState({});
-  const [showThresholds, setShowThresholds] = useState(true);
-  const [chartType, setChartType] = useState('line'); // line, area
 
-  // Fetch data
+
+  // Granularity options
+  const granularities = [
+    { id: 'hourly', label: 'Hourly' },
+    { id: 'daily', label: 'Daily' },
+    { id: 'weekly', label: 'Weekly' },
+    { id: 'monthly', label: 'Monthly' }
+  ];
+
+  // Fetch data with timeframe support
   useEffect(() => {
     const load = async () => {
       try {
         setLoading(true);
-
-        const params = {};
-
-        if (start || end) {
-          if (start) params.start = start;
-          if (end) params.end = end;
-        } else {
-          params.timeframe = timeframe;
-        }
-
-        const resp = await api.get('/api/historical', { params });
-
-        const flat = (resp.data || []).map(r => ({
-          timestamp: r.timestamp,
-          ts: r.timestamp ? new Date(r.timestamp).getTime() : null,
-          ...(r.metrics || {})
-        }));
-
-        setRows(flat);
+        const resp = await api.get('/api/historical', { params: { timeframe: '90d' } });
         
-        // Calculate statistics
-        calculateStats(flat);
+        const rawData = (resp.data || []).map(r => {
+          const rawStr = r.recorded_at || r.timestamp;
+          const safeDateStr = typeof rawStr === 'string' ? rawStr.replace(' ', 'T') : rawStr;
+          const d = new Date(safeDateStr);
+          return {
+            ...r,
+            _date: d,
+            _localDate: formatDateISO(d),
+            metrics: r.metrics || r
+          };
+        });
+
+        setRows(rawData);
+        calculateStats(rawData);
       } catch (e) {
         console.error(e);
         setRows([]);
@@ -77,14 +72,26 @@ export default function HistoricalData() {
     };
 
     load();
-  }, [timeframe, start, end]);
+  }, []);
+
+  // Helper: Format date to YYYY-MM-DD
+  const formatDateISO = (d) => {
+    if (!d || isNaN(d)) return '1970-01-01';
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
   
-  // Calculate statistics for each metric
+  // Calculate statistics
   const calculateStats = (data) => {
     const statistics = {};
     
     metrics.forEach(m => {
-      const values = data.map(d => Number(d[m.key] || 0)).filter(v => v > 0);
+      const values = data.map(d => {
+        const m_data = d.metrics ? d.metrics[m.key] : d[m.key];
+        return Number(m_data || 0);
+      }).filter(v => v > 0);
       
       if (values.length > 0) {
         const sorted = [...values].sort((a, b) => a - b);
@@ -122,102 +129,239 @@ export default function HistoricalData() {
     
     setStats(statistics);
   };
-  
-  // Toggle metric selection
-  const toggleMetric = (key) => {
-    setSelectedMetrics(prev => 
-      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
-    );
-  };
 
-  // Prepare line series
-  const seriesByMetric = useMemo(() => {
-    const map = {};
-    metrics.forEach(m => (map[m.key] = []));
+  // Filter and aggregate data by granularity
+  const aggregatedData = useMemo(() => {
+    if (rows.length === 0) return [];
 
-    rows.forEach(r => {
-      metrics.forEach(m => {
-        map[m.key].push({
-          ts: r.ts,
-          timestamp: r.timestamp,
-          value: r[m.key] ?? null
+    // Apply date filtering
+    let filtered = rows;
+    if (timeBucket === 'daily') {
+      filtered = rows.filter(d => d._localDate === selectedDate);
+      // Fallback: if no data for selectedDate, use the most recent day
+      if (filtered.length === 0 && rows.length > 0) {
+        const availableDates = [...new Set(rows.map(r => r._localDate))].sort().reverse();
+        if (availableDates.length > 0) {
+          filtered = rows.filter(d => d._localDate === availableDates[0]);
+        }
+      }
+    } else if (timeBucket === 'weekly') {
+      filtered = rows.filter(d => {
+        const date = d._date;
+        const year = date.getFullYear();
+        const firstDayOfYear = new Date(year, 0, 1);
+        const pastDaysOfYear = (date - firstDayOfYear) / 86400000;
+        const weekNum = Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
+        const weekStr = `${year}-W${weekNum < 10 ? '0' + weekNum : weekNum}`;
+        const selectedWeek = new Date(selectedDate).toISOString().slice(0, 10);
+        const selectedWeekNum = Math.ceil((new Date(selectedWeek) - new Date(year, 0, 1)) / 86400000 / 7);
+        return weekNum === selectedWeekNum;
+      });
+    } else if (timeBucket === 'monthly') {
+      filtered = rows.filter(d => d._localDate.slice(0, 7) === selectedMonth);
+    } else if (timeBucket === 'hourly') {
+      filtered = rows.filter(d => d._localDate === selectedDate);
+    }
+
+    filtered.sort((a, b) => a._date - b._date);
+
+    // Aggregate based on bucket
+    if (timeBucket === 'hourly') {
+      return filtered.map((d, i) => {
+        const m_data = d.metrics || d;
+        const entry = {
+          name: d._date.toLocaleTimeString([], { minute: '2-digit', second: '2-digit' })
+        };
+        metrics.forEach(m => {
+          entry[m.key] = m_data[m.key] ?? 0;
+          entry[`${m.key}_count`] = 1;
         });
+        return entry;
+      });
+    }
+
+    const groups = {};
+    filtered.forEach(item => {
+      const date = item._date;
+      let key = '';
+      let sortKey = 0;
+
+      if (timeBucket === 'daily') {
+        key = date.toLocaleDateString([], { hour: '2-digit', minute: '2-digit' });
+        sortKey = date.getHours() * 60 + date.getMinutes();
+      } else if (timeBucket === 'weekly') {
+        key = date.toLocaleDateString([], { day: 'numeric', month: 'short' });
+        sortKey = date.getDate();
+      } else if (timeBucket === 'monthly') {
+        const weekInMonth = Math.ceil(date.getDate() / 7);
+        key = `Week ${weekInMonth}`;
+        sortKey = date.getDate();
+      }
+
+      if (!groups[key]) {
+        const group = { name: key, sortKey };
+        metrics.forEach(m => {
+          group[m.key] = [];
+          group[`${m.key}_count`] = 0;
+        });
+        groups[key] = group;
+      }
+
+      const m_data = item.metrics || item;
+      metrics.forEach(m => {
+        const val = m_data[m.key];
+        if (val !== undefined && val !== null) {
+          groups[key][m.key].push(Number(val));
+          groups[key][`${m.key}_count`]++;
+        }
       });
     });
 
-    return map;
-  }, [rows]);
+    const result = Object.values(groups).map(g => {
+      const entry = { name: g.name, sortKey: g.sortKey };
+      metrics.forEach(m => {
+        const list = g[m.key];
+        const precision = (m.key === 'co' || m.key === 'co2') ? 2 : 1;
+        entry[m.key] = list.length ? Number((list.reduce((a, b) => a + b, 0) / list.length).toFixed(precision)) : 0;
+        entry[`${m.key}_count`] = g[`${m.key}_count`];
+      });
+      return entry;
+    });
+
+    result.sort((a, b) => a.sortKey - b.sortKey);
+    return result;
+  }, [rows, timeBucket, selectedDate, selectedMonth]);
 
   // Time formatting
   const timeTickFormatter = (value) => {
-    try {
-      const d = new Date(value);
-      if (timeframe === '5m' || timeframe === '24h')
-        return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-      if (timeframe === '7d' || timeframe === '30d')
-        return d.toLocaleDateString();
-
-      return d.toLocaleString();
-    } catch {
-      return value;
-    }
+    return value;
   };
 
-  const tooltipFormatter = (metric) => (val) => {
-    const m = metrics.find(x => x.key === metric);
-    return [val, `${m?.label} (${m?.unit})`];
-  };
-
-  const tooltipLabelFormatter = (label) => {
-    try {
-      return new Date(label).toLocaleString();
-    } catch {
-      return label;
-    }
-  };
+  if (loading) {
+    return (
+      <div style={{ padding: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
+        <div style={{ fontSize: 40, marginBottom: 16 }}>⏳</div>
+        <h3>Processing Time-Series Aggregates...</h3>
+      </div>
+    );
+  }
 
   return (
-    <div style={{ padding: '0 4px' }}>
+    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 32 }}>
       {/* Header */}
-      <div style={{ marginBottom: 20 }}>
-        <h2 style={{ margin: 0, fontSize: 28, fontWeight: 'bold' }}>📊 Historical Data Analysis</h2>
-        <p style={{ margin: '4px 0 0 0', opacity: 0.7, fontSize: 14 }}>
-          Comprehensive historical trends with statistics and multi-view analysis
+      <div>
+        <h1 style={{ margin: 0, fontSize: '1.8rem', background: 'linear-gradient(135deg, #f8fafc 0%, #cbd5e1 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+          Raw Parameter Analysis
+        </h1>
+        <p style={{ margin: '8px 0 0 0', opacity: 0.7, fontSize: 14 }}>
+          Time-bucketed aggregation for historical trend discovery
         </p>
       </div>
-      
-      {/* Summary Stats - like the reference repo */}
-      {!loading && rows.length > 0 && (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-          gap: '12px',
-          marginBottom: '20px'
+
+      {/* Filter Controls */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+          {/* Granularity Selector */}
+          <nav style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', padding: 4, borderRadius: 12, border: '1px solid rgba(255,255,255,0.08)', gap: 0 }}>
+            {granularities.map(g => (
+              <button 
+                key={g.id}
+                onClick={() => setTimeBucket(g.id)}
+                style={{ 
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  border: 'none',
+                  background: timeBucket === g.id ? '#3b82f6' : 'transparent',
+                  color: timeBucket === g.id ? '#fff' : 'rgba(255,255,255,0.6)',
+                  cursor: 'pointer',
+                  fontSize: '0.85rem',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                {g.label}
+              </button>
+            ))}
+          </nav>
+
+          {/* Date Selectors */}
+          {timeBucket === 'daily' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <label style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: '600' }}>
+                Pick a Day
+              </label>
+              <input 
+                type="date" 
+                value={selectedDate} 
+                onChange={(e) => setSelectedDate(e.target.value)} 
+                style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', padding: '6px 12px', fontSize: '0.85rem', outline: 'none' }}
+              />
+            </div>
+          )}
+
+          {timeBucket === 'weekly' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <label style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: '600' }}>
+                Pick Week Start
+              </label>
+              <input 
+                type="date" 
+                value={selectedDate} 
+                onChange={(e) => setSelectedDate(e.target.value)} 
+                style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', padding: '6px 12px', fontSize: '0.85rem', outline: 'none' }}
+              />
+            </div>
+          )}
+
+          {timeBucket === 'monthly' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <label style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: '600' }}>
+                Pick a Month
+              </label>
+              <input 
+                type="month" 
+                value={selectedMonth} 
+                onChange={(e) => setSelectedMonth(e.target.value)} 
+                style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', padding: '6px 12px', fontSize: '0.85rem', outline: 'none' }}
+              />
+            </div>
+          )}
+        </div>
+
+        <div style={{ fontSize: 13, opacity: 0.7, fontVariantNumeric: 'tabular-nums' }}>
+          📊 {aggregatedData.length} periods | {rows.length} data points
+        </div>
+      </div>
+
+      {/* Stats Summary */}
+      {rows.length > 0 && (
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', 
+          gap: 12
         }}>
           {metrics.map(m => {
             const st = stats[m.key];
             if (!st) return null;
             return (
               <div key={m.key} style={{
-                backgroundColor: 'rgba(255,255,255,0.05)',
-                borderRadius: '10px',
-                padding: '14px',
-                border: '1px solid rgba(255,255,255,0.08)',
+                background: 'rgba(255,255,255,0.03)',
+                borderRadius: 12,
+                padding: 16,
+                border: `1px solid rgba(255,255,255,0.08)`,
                 backdropFilter: 'blur(10px)'
               }}>
-                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', marginBottom: '4px', textTransform: 'uppercase', fontWeight: '600' }}>
+                <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', marginBottom: 8, textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.05em' }}>
                   {m.label}
                 </div>
-                <div style={{ fontSize: '20px', fontWeight: '700', color: m.stroke, marginBottom: '8px' }}>
-                  {st.mean} {m.unit}
+                <div style={{ fontSize: '1.25rem', fontWeight: 700, color: m.stroke, marginBottom: 8 }}>
+                  {st.mean}
                 </div>
-                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)' }}>
-                  <div>Min: {st.min} {m.unit}</div>
-                  <div>Max: {st.max} {m.unit}</div>
-                  {m.threshold && (
-                    <div style={{ color: st.exceedancePercentage > 0 ? '#ff6b6b' : '#00e400', marginTop: '4px' }}>
-                      Exceedances: {st.exceedancePercentage}%
+                <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', lineHeight: 1.6 }}>
+                  <div>Min: {st.min}</div>
+                  <div>Max: {st.max}</div>
+                  {m.threshold && parseFloat(st.exceedancePercentage) > 0 && (
+                    <div style={{ color: '#ef4444', fontWeight: 600, marginTop: 4 }}>
+                      ⚠️ {st.exceedancePercentage}% exceeded
                     </div>
                   )}
                 </div>
@@ -226,410 +370,100 @@ export default function HistoricalData() {
           })}
         </div>
       )}
-      
-      {/* Controls Panel */}
-      <div style={{ 
-        background: 'rgba(255,255,255,0.05)', 
-        padding: 16, 
-        borderRadius: 12, 
-        marginBottom: 16,
-        boxShadow: '0 4px 6px rgba(0,0,0,0.05)',
-        border: '1px solid rgba(255,255,255,0.08)',
-        backdropFilter: 'blur(10px)'
-      }}>
-        {/* Timeframe Selection */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16, alignItems: 'center' }}>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button className="btn" onClick={() => { setStart(''); setEnd(''); setTimeframe('5m'); }}
-              style={{ background: !start && !end && timeframe === '5m' ? 'var(--accent)' : '' }}>
-              5 mins
-            </button>
-            <button className="btn" onClick={() => { setStart(''); setEnd(''); setTimeframe('24h'); }}
-              style={{ background: !start && !end && timeframe === '24h' ? 'var(--accent)' : '' }}>
-              24 hours
-            </button>
-            <button className="btn" onClick={() => { setStart(''); setEnd(''); setTimeframe('7d'); }}
-              style={{ background: !start && !end && timeframe === '7d' ? 'var(--accent)' : '' }}>
-              7 days
-            </button>
-            <button className="btn" onClick={() => { setStart(''); setEnd(''); setTimeframe('30d'); }}
-              style={{ background: !start && !end && timeframe === '30d' ? 'var(--accent)' : '' }}>
-              30 days
-            </button>
-          </div>
 
-          <div style={{ height: 24, width: 1, background: 'rgba(255,255,255,0.1)' }} />
-
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flex: 1 }}>
-            <label style={{ fontSize: 13, fontWeight: '500' }}>Custom Range:</label>
-            <input 
-              type="datetime-local" 
-              value={start} 
-              onChange={(e) => setStart(e.target.value)}
-              style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.05)', color: '#fff' }}
-            />
-            <span>to</span>
-            <input 
-              type="datetime-local" 
-              value={end} 
-              onChange={(e) => setEnd(e.target.value)}
-              style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.05)', color: '#fff' }}
-            />
-            {(start || end) && (
-              <button className="btn" onClick={() => { setStart(''); setEnd(''); }}>Clear</button>
-            )}
-          </div>
-        </div>
-        
-        {/* View Mode & Chart Options */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center' }}>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <span style={{ fontSize: 13, fontWeight: '500', marginRight: 4 }}>View:</span>
-            <button 
-              className="btn" 
-              onClick={() => setViewMode('grid')}
-              style={{ background: viewMode === 'grid' ? 'var(--accent)' : '' }}>
-              📊 Grid
-            </button>
-            <button 
-              className="btn" 
-              onClick={() => setViewMode('combined')}
-              style={{ background: viewMode === 'combined' ? 'var(--accent)' : '' }}>
-              📈 Combined
-            </button>
-            <button 
-              className="btn" 
-              onClick={() => setViewMode('table')}
-              style={{ background: viewMode === 'table' ? 'var(--accent)' : '' }}>
-              📋 Table
-            </button>
-          </div>
-          
-          <div style={{ height: 20, width: 1, background: 'rgba(255,255,255,0.1)' }} />
-          
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <span style={{ fontSize: 13, fontWeight: '500', marginRight: 4 }}>Chart:</span>
-            <button 
-              className="btn" 
-              onClick={() => setChartType('line')}
-              style={{ background: chartType === 'line' ? 'var(--accent)' : '' }}>
-              Line
-            </button>
-            <button 
-              className="btn" 
-              onClick={() => setChartType('area')}
-              style={{ background: chartType === 'area' ? 'var(--accent)' : '' }}>
-              Area
-            </button>
-          </div>
-          
-          <div style={{ height: 20, width: 1, background: 'rgba(255,255,255,0.1)' }} />
-          
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-            <input 
-              type="checkbox" 
-              checked={showThresholds} 
-              onChange={(e) => setShowThresholds(e.target.checked)}
-            />
-            <span style={{ fontSize: 13 }}>Show Thresholds</span>
-          </label>
-          
-          <div style={{ marginLeft: 'auto', fontSize: 13, opacity: 0.7 }}>
-            📊 {rows.length} data points
-          </div>
-        </div>
-      </div>
-
-      {/* Statistics Summary */}
-      {!loading && rows.length > 0 && (
-        <div style={{ 
-          background: 'var(--card-bg)', 
-          padding: 16, 
-          borderRadius: 12, 
-          marginBottom: 16,
-          boxShadow: 'var(--glass-shadow)',
-          border: '1px solid var(--glass-border)'
-        }}>
-          <h3 style={{ margin: '0 0 12px 0', fontSize: 18 }}>📈 Statistical Summary</h3>
-          <div style={{ 
-            display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', 
-            gap: 12 
-          }}>
-            {metrics.filter(m => stats[m.key]).map(m => {
-              const st = stats[m.key];
-              return (
-                <div key={m.key} style={{ 
-                  padding: 12, 
-                  background: 'rgba(255,255,255,0.03)', 
-                  borderRadius: 8,
-                  borderLeft: `4px solid ${m.stroke}`
-                }}>
-                  <div style={{ fontWeight: 'bold', marginBottom: 8, color: m.stroke }}>
-                    {m.label} ({m.unit})
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, fontSize: 12 }}>
-                    <div>Min: <strong>{st.min}</strong></div>
-                    <div>Max: <strong>{st.max}</strong></div>
-                    <div>Mean: <strong>{st.mean}</strong></div>
-                    <div>Median: <strong>{st.median}</strong></div>
-                    <div>Std Dev: <strong>{st.stdDev}</strong></div>
-                    <div>Samples: <strong>{st.count}</strong></div>
-                    {m.threshold && st.exceedances > 0 && (
-                      <>
-                        <div style={{ gridColumn: 'span 2', color: '#ef4444', fontWeight: 'bold' }}>
-                          ⚠️ Exceeded threshold {st.exceedances} times ({st.exceedancePercentage}%)
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+      {/* No Data State */}
+      {!loading && aggregatedData.length === 0 && (
+        <div style={{ textAlign: 'center', padding: 60, background: 'rgba(255,255,255,0.05)', borderRadius: 12 }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>📭</div>
+          <p style={{ margin: 0, opacity: 0.7 }}>No data available for the selected period</p>
         </div>
       )}
-      
-      {/* Metric Selector (for combined view) */}
-      {viewMode === 'combined' && (
-        <div style={{ 
-          background: 'var(--card-bg)', 
-          padding: 12, 
-          borderRadius: 12, 
-          marginBottom: 16,
-          boxShadow: 'var(--glass-shadow)',
-          border: '1px solid var(--glass-border)'
-        }}>
-          <span style={{ fontSize: 13, fontWeight: '500', marginRight: 12 }}>Select Metrics:</span>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
-            {metrics.map(m => (
-              <label key={m.key} style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: 6, 
-                padding: '6px 12px', 
-                background: selectedMetrics.includes(m.key) ? m.stroke + '20' : 'rgba(255,255,255,0.05)',
-                borderRadius: 20,
-                cursor: 'pointer',
-                border: selectedMetrics.includes(m.key) ? `2px solid ${m.stroke}` : '2px solid transparent',
-                transition: 'all 0.2s'
-              }}>
-                <input 
-                  type="checkbox" 
-                  checked={selectedMetrics.includes(m.key)}
-                  onChange={() => toggleMetric(m.key)}
-                />
-                <span style={{ fontSize: 13, fontWeight: selectedMetrics.includes(m.key) ? 'bold' : 'normal' }}>
-                  {m.label}
+
+      {/* Analysis Grid - RawAnalysisTab Style */}
+      {aggregatedData.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 24 }}>
+          {metrics.map(param => (
+            <div key={param.key} style={{
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: 20,
+              padding: 24,
+              backdropFilter: 'blur(10px)'
+            }}>
+              {/* Card Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 500 }}>
+                  {param.label}
+                </h3>
+                <span style={{ fontSize: '0.75rem', background: 'rgba(255,255,255,0.05)', padding: '4px 10px', borderRadius: 6, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  {param.unit}
                 </span>
-              </label>
-            ))}
-          </div>
-        </div>
-      )}
+              </div>
 
-      {/* Loading & no data */}
-      {loading && (
-        <div style={{ textAlign: 'center', padding: 40 }}>
-          <div style={{ fontSize: 48 }}>⏳</div>
-          <p>Loading historical data...</p>
-        </div>
-      )}
-      {!loading && rows.length === 0 && (
-        <div style={{ textAlign: 'center', padding: 40, background: 'var(--card-bg)', borderRadius: 12 }}>
-          <div style={{ fontSize: 48 }}>📭</div>
-          <p>No data available for the selected time period</p>
-        </div>
-      )}
-
-      {/* Grid View */}
-      {!loading && rows.length > 0 && viewMode === 'grid' && (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
-          gap: 16
-        }}>
-          {metrics.map(m => {
-            const ChartComponent = chartType === 'area' ? AreaChart : LineChart;
-            const DataComponent = chartType === 'area' ? Area : Line;
-            
-            return (
-              <div key={m.key} style={{ 
-                background: 'var(--card-bg)', 
-                padding: 16, 
-                borderRadius: 12,
-                boxShadow: 'var(--glass-shadow)',
-                border: '1px solid var(--glass-border)'
-              }}>
-                <div style={{ 
-                  fontWeight: 'bold', 
-                  marginBottom: 12, 
-                  fontSize: 16,
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
-                }}>
-                  <span>
-                    {m.label} <span style={{ fontSize: 12, opacity: 0.6 }}>({m.unit})</span>
-                  </span>
-                  {stats[m.key] && (
-                    <span style={{ fontSize: 14, color: m.stroke }}>
-                      Avg: {stats[m.key].mean}
-                    </span>
-                  )}
+              {/* Two-Chart Layout: Trend + Distribution */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32 }}>
+                {/* Trend Chart (Area) */}
+                <div>
+                  <label style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'rgba(255,255,255,0.6)', display: 'block', marginBottom: 12 }}>
+                    Trend (Line)
+                  </label>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <ComposedChart data={aggregatedData} margin={{ top: 5, right: 5, bottom: 15, left: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                      <XAxis dataKey="name" hide />
+                      <YAxis stroke="#64748b" fontSize={10} />
+                      <Tooltip 
+                        contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#f8fafc' }}
+                        cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                      />
+                      <Area 
+                        type="monotone" 
+                        dataKey={param.key} 
+                        fill={`${param.stroke}20`} 
+                        stroke={param.stroke} 
+                        strokeWidth={2} 
+                      />
+                    </ComposedChart>
+                  </ResponsiveContainer>
                 </div>
 
-                <div style={{ width: '100%', height: 240 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ChartComponent data={seriesByMetric[m.key]} syncId="history">
-                      <defs>
-                        <linearGradient id={`gradient-${m.key}`} x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={m.stroke} stopOpacity={0.8}/>
-                          <stop offset="95%" stopColor={m.stroke} stopOpacity={0.1}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                      <XAxis
-                        dataKey="ts"
-                        type="number"
-                        scale="time"
-                        domain={['auto', 'auto']}
-                        tickFormatter={timeTickFormatter}
-                        stroke="rgba(255,255,255,0.3)"
+                {/* Distribution Chart (Bar) */}
+                <div>
+                  <label style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'rgba(255,255,255,0.6)', display: 'block', marginBottom: 12 }}>
+                    Distribution (Bar)
+                  </label>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <ComposedChart data={aggregatedData} margin={{ top: 5, right: 5, bottom: 15, left: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                      <XAxis dataKey="name" hide />
+                      <YAxis stroke="#64748b" fontSize={10} />
+                      <Tooltip 
+                        contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#f8fafc' }}
+                        cursor={{ fill: 'rgba(255,255,255,0.05)' }}
                       />
-                      <YAxis width={60} stroke="rgba(255,255,255,0.3)" />
-                      <Tooltip
-                        labelFormatter={tooltipLabelFormatter}
-                        formatter={tooltipFormatter(m.key)}
-                        contentStyle={{ background: 'rgba(0,0,0,0.8)', border: 'none', borderRadius: 8, color: '#fff' }}
-                      />
-                      {showThresholds && m.threshold && (
-                        <ReferenceLine 
-                          y={m.threshold} 
-                          stroke="#ef4444" 
-                          strokeDasharray="5 5" 
-                          label={{ value: `Threshold: ${m.threshold}`, fill: '#ef4444', fontSize: 11 }}
-                        />
-                      )}
-                      <DataComponent
-                        type="monotone"
-                        dataKey="value"
-                        stroke={m.stroke}
-                        strokeWidth={2}
-                        fill={chartType === 'area' ? `url(#gradient-${m.key})` : 'none'}
-                        dot={false}
-                        activeDot={{ r: 6 }}
-                        isAnimationActive={false}
-                      />
-                      <Brush height={18} travellerWidth={10} stroke={m.stroke} />
-                    </ChartComponent>
+                      <Bar dataKey={param.key} fill={param.stroke} radius={[4, 4, 0, 0]} />
+                    </ComposedChart>
                   </ResponsiveContainer>
                 </div>
               </div>
-            );
-          })}
-        </div>
-      )}
-      
-      {/* Combined View */}
-      {!loading && rows.length > 0 && viewMode === 'combined' && (
-        <div style={{ 
-          background: 'var(--card-bg)', 
-          padding: 16, 
-          borderRadius: 12,
-          boxShadow: 'var(--glass-shadow)',
-          border: '1px solid var(--glass-border)'
-        }}>
-          <h3 style={{ margin: '0 0 16px 0', fontSize: 18 }}>Combined Metrics View</h3>
-          <div style={{ width: '100%', height: 500 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={rows}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                <XAxis
-                  dataKey="ts"
-                  type="number"
-                  scale="time"
-                  domain={['auto', 'auto']}
-                  tickFormatter={timeTickFormatter}
-                  stroke="rgba(255,255,255,0.3)"
-                />
-                <YAxis stroke="rgba(255,255,255,0.3)" />
-                <Tooltip
-                  labelFormatter={tooltipLabelFormatter}
-                  contentStyle={{ background: 'rgba(0,0,0,0.8)', border: 'none', borderRadius: 8, color: '#fff' }}
-                />
-                <Legend />
-                {metrics.filter(m => selectedMetrics.includes(m.key)).map(m => (
-                  <Line
-                    key={m.key}
-                    type="monotone"
-                    dataKey={m.key}
-                    stroke={m.stroke}
-                    strokeWidth={2}
-                    dot={false}
-                    name={`${m.label} (${m.unit})`}
-                  />
-                ))}
-                <Brush height={24} travellerWidth={12} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      )}
-      
-      {/* Table View */}
-      {!loading && rows.length > 0 && viewMode === 'table' && (
-        <div style={{ 
-          background: 'var(--card-bg)', 
-          padding: 16, 
-          borderRadius: 12,
-          boxShadow: 'var(--glass-shadow)',
-          border: '1px solid var(--glass-border)',
-          overflowX: 'auto'
-        }}>
-          <h3 style={{ margin: '0 0 16px 0', fontSize: 18 }}>Data Table</h3>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-            <thead>
-              <tr style={{ background: 'rgba(255,255,255,0.05)', borderBottom: '2px solid rgba(255,255,255,0.1)' }}>
-                <th style={{ padding: 10, textAlign: 'left' }}>Timestamp</th>
-                {metrics.map(m => (
-                  <th key={m.key} style={{ padding: 10, textAlign: 'right' }}>
-                    {m.label} ({m.unit})
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.slice(0, 100).map((row, i) => (
-                <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                  <td style={{ padding: 10 }}>{new Date(row.timestamp).toLocaleString()}</td>
-                  {metrics.map(m => {
-                    const value = row[m.key];
-                    const isExceeded = m.threshold && value > m.threshold;
-                    return (
-                      <td 
-                        key={m.key} 
-                        style={{ 
-                          padding: 10, 
-                          textAlign: 'right',
-                          color: isExceeded ? '#ef4444' : 'inherit',
-                          fontWeight: isExceeded ? 'bold' : 'normal'
-                        }}
-                      >
-                        {value ? Number(value).toFixed(2) : '-'}
-                        {isExceeded && ' ⚠️'}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {rows.length > 100 && (
-            <div style={{ marginTop: 12, textAlign: 'center', opacity: 0.7, fontSize: 12 }}>
-              Showing first 100 of {rows.length} records
+
+              {/* Stats Footer */}
+              {stats[param.key] && (
+                <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.05)', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 12, fontSize: '0.85rem' }}>
+                  <div><span style={{ opacity: 0.6 }}>Mean:</span> <strong style={{ color: param.stroke }}>{stats[param.key].mean}</strong></div>
+                  <div><span style={{ opacity: 0.6 }}>Min:</span> <strong>{stats[param.key].min}</strong></div>
+                  <div><span style={{ opacity: 0.6 }}>Max:</span> <strong>{stats[param.key].max}</strong></div>
+                  <div><span style={{ opacity: 0.6 }}>Std Dev:</span> <strong>{stats[param.key].stdDev}</strong></div>
+                  <div><span style={{ opacity: 0.6 }}>Samples:</span> <strong>{stats[param.key].count}</strong></div>
+                  {param.threshold && parseFloat(stats[param.key].exceedancePercentage) > 0 && (
+                    <div style={{ gridColumn: 'span 1', color: '#ef4444', fontWeight: 600 }}>
+                      ⚠️ {stats[param.key].exceedancePercentage}% exceeded
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-          )}
+          ))}
         </div>
       )}
     </div>
