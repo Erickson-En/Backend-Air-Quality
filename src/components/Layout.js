@@ -6,13 +6,11 @@ import Header from './Header';
 export default function Layout({ children }) {
   return (
     <div className="app-root">
-      <div className="sidebar">
-        <Sidebar />
-      </div>
-      <div className="main">
+      <Sidebar />
+      <main className="main">
         <Header />
         {children}
-      </div>
+      </main>
     </div>
   );
 }

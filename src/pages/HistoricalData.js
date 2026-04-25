@@ -241,98 +241,216 @@ export default function HistoricalData() {
     return value;
   };
 
-  // Generate PDF Report using jsPDF
+  // Generate PDF Report using jsPDF + autoTable
   const handleGenerateReport = async () => {
     if (!reportStartDate || !reportEndDate) {
-      alert('Please select both start and end dates');
+      alert('Please select both start and end dates.');
+      return;
+    }
+    if (new Date(reportStartDate) > new Date(reportEndDate)) {
+      alert('Start date must be before end date.');
       return;
     }
 
-    if (new Date(reportStartDate) > new Date(reportEndDate)) {
-      alert('Start date must be before end date');
+    // Verify jsPDF is loaded
+    const jsPDFLib = window.jspdf?.jsPDF || window.jsPDF;
+    if (!jsPDFLib) {
+      alert('PDF library is still loading. Please wait a moment and try again.');
       return;
     }
 
     try {
       setReportLoading(true);
-      const response = await api.post('/api/analytics/generate-report', {
-        granularity: reportGranularity,
-        startDate: new Date(reportStartDate).toISOString(),
-        endDate: new Date(reportEndDate).toISOString()
-      });
 
-      const reportData = response.data;
-      const { jsPDF } = window.jspdf;
-      const doc = new jsPDF('p', 'mm', 'a4');
-      
-      let yPosition = 20;
-      const pageHeight = doc.internal.pageSize.getHeight();
-      const margin = 15;
-      const maxWidth = 180;
-
-      const addText = (text, fontSize = 12, bold = false, indent = 0) => {
-        if (yPosition > pageHeight - 20) {
-          doc.addPage();
-          yPosition = 20;
+      // Fetch report data from backend
+      let reportData;
+      try {
+        const response = await api.post('/api/analytics/generate-report', {
+          granularity: reportGranularity,
+          startDate: new Date(reportStartDate).toISOString(),
+          endDate: new Date(reportEndDate).toISOString(),
+        });
+        reportData = response.data;
+      } catch (apiErr) {
+        if (apiErr.response?.status === 404) {
+          alert('No sensor data found for the selected date range. Please select a period that contains readings.');
+          setReportLoading(false);
+          return;
         }
-        doc.setFontSize(fontSize);
-        doc.setFont('helvetica', bold ? 'bold' : 'normal');
-        const lines = doc.splitTextToSize(text, maxWidth - indent);
-        doc.text(lines, margin + indent, yPosition);
-        yPosition += (lines.length * fontSize * 0.35) + 5;
+        throw apiErr;
+      }
+
+      // ── Build PDF ──────────────────────────────────────────
+      const doc = new jsPDFLib('p', 'mm', 'a4');
+      const PAGE_W  = doc.internal.pageSize.getWidth();
+      const PAGE_H  = doc.internal.pageSize.getHeight();
+      const MARGIN  = 15;
+      const COL_W   = PAGE_W - MARGIN * 2;
+      let y = MARGIN;
+
+      const checkPage = (needed = 10) => {
+        if (y + needed > PAGE_H - MARGIN) {
+          doc.addPage();
+          y = MARGIN;
+        }
       };
 
-      // Build PDF sections
-      addText('Air Quality Report', 20, true);
-      addText(`Type: ${reportData.header.type}`, 11);
-      addText(`Location: ${reportData.header.location}`, 11);
-      addText(`Period: ${reportData.header.period}`, 11);
-      addText(`Generated: ${reportData.header.generated}`, 10);
-      
-      addText('\nExecutive Summary', 14, true);
+      const addSection = (title) => {
+        checkPage(16);
+        y += 4;
+        doc.setFillColor(11, 19, 40);
+        doc.roundedRect(MARGIN, y, COL_W, 8, 2, 2, 'F');
+        doc.setTextColor(0, 229, 160);
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.text(title.toUpperCase(), MARGIN + 4, y + 5.5);
+        doc.setTextColor(220, 230, 245);
+        y += 13;
+      };
+
+      const addKeyValue = (label, value, indent = MARGIN + 4) => {
+        checkPage(7);
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(160, 180, 210);
+        doc.text(label + ':', indent, y);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(220, 230, 245);
+        const valLines = doc.splitTextToSize(String(value ?? '—'), COL_W - indent + MARGIN - 40);
+        doc.text(valLines, indent + 42, y);
+        y += valLines.length * 5 + 1;
+      };
+
+      // ── Cover header ────────────────────────────────────────
+      doc.setFillColor(7, 13, 28);
+      doc.rect(0, 0, PAGE_W, PAGE_H, 'F');
+
+      doc.setFillColor(0, 40, 25);
+      doc.rect(0, 0, PAGE_W, 50, 'F');
+
+      doc.setTextColor(0, 229, 160);
+      doc.setFontSize(22);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Air Quality Monitoring', MARGIN, 22);
+
+      doc.setFontSize(14);
+      doc.setTextColor(100, 200, 160);
+      doc.text('Environmental Report', MARGIN, 32);
+
+      doc.setFontSize(9);
+      doc.setTextColor(120, 160, 140);
+      doc.text(
+        `${reportData.header?.type || reportGranularity.toUpperCase()} REPORT  ·  ${reportData.header?.location || 'Lab Sensor A'}`,
+        MARGIN, 42
+      );
+      doc.text(
+        `Period: ${reportData.header?.period || `${reportStartDate} → ${reportEndDate}`}`,
+        MARGIN, 48
+      );
+
+      doc.setTextColor(60, 100, 80);
+      doc.setFontSize(8);
+      doc.text(`Generated: ${new Date().toLocaleString()}`, PAGE_W - MARGIN, 48, { align: 'right' });
+
+      y = 58;
+
+      // ── Executive Summary ─────────────────────────────────
       if (reportData.executiveSummary) {
-        Object.entries(reportData.executiveSummary).forEach(([key, value]) => {
-          addText(`• ${key}: ${value}`, 10, false, 5);
-        });
+        addSection('Executive Summary');
+        Object.entries(reportData.executiveSummary).forEach(([k, v]) => addKeyValue(k, v));
       }
 
-      addText('\nPollutant Analysis', 14, true);
+      // ── Pollutant Analysis (table) ─────────────────────────
       if (reportData.pollutantAnalysis) {
-        Object.entries(reportData.pollutantAnalysis).forEach(([pollutant, stats]) => {
-          addText(pollutant, 11, true, 5);
-          Object.entries(stats).forEach(([k, v]) => {
-            addText(`  ${k}: ${v}`, 9, false, 10);
+        addSection('Pollutant Analysis');
+        const rows = Object.entries(reportData.pollutantAnalysis).map(([name, s]) => [
+          name,
+          s.mean ?? s.average ?? '—',
+          s.min   ?? '—',
+          s.max   ?? '—',
+          s.exceedances != null ? s.exceedances : '—',
+          s.exceedancePercentage != null ? `${s.exceedancePercentage}%` : '—',
+        ]);
+
+        if (doc.autoTable) {
+          doc.autoTable({
+            startY: y,
+            margin: { left: MARGIN, right: MARGIN },
+            head: [['Pollutant', 'Mean', 'Min', 'Max', 'Exceedances', 'Exceed %']],
+            body: rows,
+            styles: {
+              fontSize: 8,
+              cellPadding: 3,
+              fillColor: [11, 19, 40],
+              textColor: [200, 220, 240],
+              lineColor: [30, 50, 80],
+              lineWidth: 0.3,
+            },
+            headStyles: {
+              fillColor: [0, 80, 50],
+              textColor: [0, 229, 160],
+              fontStyle: 'bold',
+            },
+            alternateRowStyles: { fillColor: [15, 25, 50] },
+            theme: 'grid',
           });
-        });
+          y = doc.lastAutoTable.finalY + 8;
+        } else {
+          rows.forEach(r => addKeyValue(r[0], `Mean: ${r[1]}, Min: ${r[2]}, Max: ${r[3]}`));
+        }
       }
 
-      addText('\nEnvironmental Parameters', 14, true);
+      // ── Environmental Parameters ───────────────────────────
       if (reportData.environmental) {
-        Object.entries(reportData.environmental).forEach(([param, stats]) => {
-          addText(param, 11, true, 5);
-          Object.entries(stats).forEach(([k, v]) => {
-            addText(`  ${k}: ${v}`, 9, false, 10);
-          });
+        addSection('Environmental Parameters');
+        Object.entries(reportData.environmental).forEach(([param, s]) => {
+          const vals = [s.mean ?? s.average, s.min, s.max].filter(Boolean).join(' / ');
+          addKeyValue(param, vals || JSON.stringify(s));
         });
       }
 
-      addText('\nHealth & Compliance', 14, true);
+      // ── Health & Compliance ────────────────────────────────
       if (reportData.healthCompliance) {
-        Object.entries(reportData.healthCompliance).forEach(([category, data]) => {
-          addText(`• ${category}: ${data.count} readings (${data.percentage})`, 10, false, 5);
-        });
+        addSection('Health & Compliance');
+        const hRows = Object.entries(reportData.healthCompliance).map(([cat, d]) => [
+          cat, d.count ?? '—', d.percentage ?? '—',
+        ]);
+        if (doc.autoTable) {
+          doc.autoTable({
+            startY: y,
+            margin: { left: MARGIN, right: MARGIN },
+            head: [['Category', 'Readings', 'Percentage']],
+            body: hRows,
+            styles: { fontSize: 8, cellPadding: 3, fillColor: [11, 19, 40], textColor: [200, 220, 240], lineColor: [30, 50, 80], lineWidth: 0.3 },
+            headStyles: { fillColor: [0, 80, 50], textColor: [0, 229, 160], fontStyle: 'bold' },
+            alternateRowStyles: { fillColor: [15, 25, 50] },
+            theme: 'grid',
+          });
+          y = doc.lastAutoTable.finalY + 8;
+        } else {
+          hRows.forEach(([cat, cnt, pct]) => addKeyValue(cat, `${cnt} readings (${pct})`));
+        }
       }
 
-      addText('\nSensor Health Status', 14, true);
+      // ── Sensor Health ──────────────────────────────────────
       if (reportData.sensorHealth) {
-        Object.entries(reportData.sensorHealth).forEach(([key, value]) => {
-          const label = key.replace(/([A-Z])/g, ' $1').trim();
-          addText(`• ${label}: ${value}`, 10, false, 5);
+        addSection('Sensor Health Status');
+        Object.entries(reportData.sensorHealth).forEach(([k, v]) => {
+          addKeyValue(k.replace(/([A-Z])/g, ' $1').trim(), v);
         });
       }
 
-      doc.save(`air-quality-report-${reportGranularity}-${Date.now()}.pdf`);
-      alert('✅ PDF Downloaded Successfully!');
+      // ── Footer on every page ───────────────────────────────
+      const totalPages = doc.internal.getNumberOfPages();
+      for (let p = 1; p <= totalPages; p++) {
+        doc.setPage(p);
+        doc.setFontSize(7);
+        doc.setTextColor(60, 100, 80);
+        doc.text(`AirQuality Pro Monitor · Page ${p} of ${totalPages}`, PAGE_W / 2, PAGE_H - 6, { align: 'center' });
+      }
+
+      doc.save(`air-quality-${reportGranularity}-report-${new Date().toISOString().slice(0,10)}.pdf`);
+      alert('✅ PDF report downloaded successfully!');
     } catch (err) {
       console.error('Report generation error:', err);
       alert('Failed to generate report: ' + (err.response?.data?.error || err.message));
