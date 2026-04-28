@@ -56,17 +56,17 @@ function checkRailwayHealth() {
       }
 
       // Consume response data
-      res.on('data', () => {});
+      res.on('data', () => { });
     })
     .on('error', (err) => {
       consecutiveFailures++;
 
       if (consecutiveFailures === 1) {
-        console.log(`\n🚨 [${timestamp}] RAILWAY OFFLINE DETECTED`);
+        console.log(`\n [${timestamp}] RAILWAY OFFLINE DETECTED`);
         console.log(`   Error: ${err.message}`);
         console.log(`   → Consecutive failures: ${consecutiveFailures}`);
       } else {
-        console.log(`🚨 [${timestamp}] Still offline (${consecutiveFailures} failures)\n`);
+        console.log(` [${timestamp}] Still offline (${consecutiveFailures} failures)\n`);
       }
 
       if (consecutiveFailures >= 2) {
@@ -83,9 +83,9 @@ function checkRailwayHealth() {
 }
 
 // Run initial check immediately
-console.log(`🔗 Monitoring: ${RAILWAY_URL}`);
-console.log(`⏱️  Check interval: ${CHECK_INTERVAL / 1000 / 60} minutes`);
-console.log(`🔄 Starting checks...\n`);
+console.log(` Monitoring: ${RAILWAY_URL}`);
+console.log(`⏱ Check interval: ${CHECK_INTERVAL / 1000 / 60} minutes`);
+console.log(`Starting checks...\n`);
 
 checkRailwayHealth();
 
