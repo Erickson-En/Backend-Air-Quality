@@ -191,7 +191,7 @@ Frontend: https://your-frontend-url.vercel.app
 
 ---
 
-## 🐛 Common Issues & Solutions
+##  Common Issues & Solutions
 
 ### "SIM card error"
 **Cause**: SIM not inserted or no data plan  
@@ -301,4 +301,4 @@ curl -X POST http://localhost:5000/api/sensor-data \
   -d '{"location":"Test","metrics":{"pm25":25.5,"pm10":50.0}}'
 ```
 
-Happy monitoring! 🚀
+Happy monitoring! 

@@ -19,13 +19,13 @@ function setCooldown(email, metric) {
   alertCooldowns.set(`${email}:${metric}`, Date.now());
 }
 
-// ── Compute 24h stats from readings array ────────────────────────────────────
+// ── Compute 24h stats from readings array
 function computeDailyStats(readings) {
   if (!readings.length) return null;
 
-  const pm25s  = readings.map(r => Number(r.metrics?.pm25 || 0)).filter(v => v > 0);
-  const pm10s  = readings.map(r => Number(r.metrics?.pm10 || 0)).filter(v => v > 0);
-  const temps  = readings.map(r => Number(r.metrics?.temperature || 0)).filter(v => v > 0);
+  const pm25s = readings.map(r => Number(r.metrics?.pm25 || 0)).filter(v => v > 0);
+  const pm10s = readings.map(r => Number(r.metrics?.pm10 || 0)).filter(v => v > 0);
+  const temps = readings.map(r => Number(r.metrics?.temperature || 0)).filter(v => v > 0);
   const humids = readings.map(r => Number(r.metrics?.humidity || 0)).filter(v => v > 0);
 
   const avg = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
@@ -35,7 +35,7 @@ function computeDailyStats(readings) {
   readings.forEach(r => {
     const h = new Date(r.timestamp).getHours();
     const period = Math.floor(h / 4) * 4;
-    const label  = `${String(period).padStart(2, '0')}:00–${String(period + 4).padStart(2, '0')}:00`;
+    const label = `${String(period).padStart(2, '0')}:00–${String(period + 4).padStart(2, '0')}:00`;
     if (!buckets[label]) buckets[label] = [];
     const pm25 = Number(r.metrics?.pm25 || 0);
     if (pm25 > 0) buckets[label].push(pm25);
@@ -47,17 +47,17 @@ function computeDailyStats(readings) {
   })).filter(b => b.pm25 > 0);
 
   return {
-    avgPM25:      avg(pm25s),
-    maxPM25:      pm25s.length ? Math.max(...pm25s) : 0,
-    minPM25:      pm25s.length ? Math.min(...pm25s) : 0,
-    avgPM10:      avg(pm10s),
-    avgTemp:      avg(temps),
-    avgHumidity:  avg(humids),
+    avgPM25: avg(pm25s),
+    maxPM25: pm25s.length ? Math.max(...pm25s) : 0,
+    minPM25: pm25s.length ? Math.min(...pm25s) : 0,
+    avgPM10: avg(pm10s),
+    avgTemp: avg(temps),
+    avgHumidity: avg(humids),
     hourlyBreakdown,
   };
 }
 
-// ── Start all scheduled jobs ─────────────────────────────────────────────────
+// ── Start all scheduled jobs
 function startEmailScheduler(Reading, User) {
   // ── Daily digest — every day at 07:00 Africa/Nairobi (EAT = UTC+3 → 04:00 UTC)
   cron.schedule('0 4 * * *', async () => {
@@ -66,18 +66,18 @@ function startEmailScheduler(Reading, User) {
       const users = await User.find({}, 'name email').lean();
       if (!users.length) return console.log('[Scheduler] No users to email.');
 
-      const since     = new Date(Date.now() - 24 * 3600 * 1000);
-      const readings  = await Reading.find({ timestamp: { $gte: since } }).lean();
-      const stats     = computeDailyStats(readings);
+      const since = new Date(Date.now() - 24 * 3600 * 1000);
+      const readings = await Reading.find({ timestamp: { $gte: since } }).lean();
+      const stats = computeDailyStats(readings);
 
       if (!stats) return console.log('[Scheduler] No readings for digest.');
 
       // Compute previous-day average for trend comparison
       const prevSince = new Date(Date.now() - 48 * 3600 * 1000);
-      const prevEnd   = new Date(Date.now() - 24 * 3600 * 1000);
+      const prevEnd = new Date(Date.now() - 24 * 3600 * 1000);
       const prevReadings = await Reading.find({ timestamp: { $gte: prevSince, $lte: prevEnd } }).lean();
-      const prevPM25s    = prevReadings.map(r => Number(r.metrics?.pm25 || 0)).filter(v => v > 0);
-      stats.prevAvgPM25  = prevPM25s.length
+      const prevPM25s = prevReadings.map(r => Number(r.metrics?.pm25 || 0)).filter(v => v > 0);
+      stats.prevAvgPM25 = prevPM25s.length
         ? prevPM25s.reduce((a, b) => a + b, 0) / prevPM25s.length
         : stats.avgPM25;
 
@@ -85,8 +85,8 @@ function startEmailScheduler(Reading, User) {
       for (const user of users) {
         try {
           await sendDailyDigest({
-            to:           user.email,
-            name:         user.name,
+            to: user.email,
+            name: user.name,
             stats,
             todayReadings: readings.length,
           });
@@ -95,16 +95,16 @@ function startEmailScheduler(Reading, User) {
           console.error(`[Scheduler] Failed digest to ${user.email}:`, e.message);
         }
       }
-      console.log(`[Scheduler] ✅ Daily digest sent to ${sent}/${users.length} users.`);
+      console.log(`[Scheduler]  Daily digest sent to ${sent}/${users.length} users.`);
     } catch (err) {
       console.error('[Scheduler] Daily digest error:', err.message);
     }
   }, { timezone: 'UTC' });
 
-  console.log('[Scheduler] ✅ Daily digest scheduled at 07:00 EAT (04:00 UTC)');
+  console.log('[Scheduler]  Daily digest scheduled at 07:00 EAT (04:00 UTC)');
 }
 
-// ── Called from processAlerts() in server.js ────────────────────────────────
+// ── Called from processAlerts() in server.js 
 async function handleAlertEmails(User, normalizedReading, triggeredAlerts) {
   if (!triggeredAlerts.length) return;
   if (!process.env.EMAIL_USER) return; // emails disabled
@@ -113,7 +113,7 @@ async function handleAlertEmails(User, normalizedReading, triggeredAlerts) {
     const users = await User.find({}, 'name email').lean();
     if (!users.length) return;
 
-    const m   = normalizedReading.metrics || {};
+    const m = normalizedReading.metrics || {};
     const aqi = calculateAQI(m.pm25);
 
     for (const user of users) {
@@ -123,21 +123,21 @@ async function handleAlertEmails(User, normalizedReading, triggeredAlerts) {
 
       try {
         await sendAQIAlert({
-          to:  user.email,
+          to: user.email,
           name: user.name,
           metrics: m,
           aqi,
           triggeredMetrics: newTriggers.map(a => ({
-            metric:    a.metric,
-            value:     a.value,
+            metric: a.metric,
+            value: a.value,
             threshold: a.threshold,
-            unit:      { pm25: 'µg/m³', pm10: 'µg/m³', co: 'ppm', o3: 'ppb', no2: 'ppb' }[a.metric] || '',
+            unit: { pm25: 'µg/m³', pm10: 'µg/m³', co: 'ppm', o3: 'ppb', no2: 'ppb' }[a.metric] || '',
           })),
         });
 
         // Set cooldown for each metric that was alerted
         newTriggers.forEach(a => setCooldown(user.email, a.metric));
-        console.log(`[Alert Email] ✅ Sent to ${user.email} (AQI ${aqi})`);
+        console.log(`[Alert Email]  Sent to ${user.email} (AQI ${aqi})`);
       } catch (e) {
         console.error(`[Alert Email] Failed for ${user.email}:`, e.message);
       }
